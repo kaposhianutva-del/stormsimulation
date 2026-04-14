@@ -104,7 +104,7 @@ oninput="updateTerrain(); updateLabels()">
 <script>
 
 // --------------------
-// DATA
+// STATE
 // --------------------
 let land = [];
 const W = 60;
@@ -116,7 +116,7 @@ let depositionData = [];
 let heightData = [];
 
 // --------------------
-// INIT LAND
+// INIT LAND (SLOPE MODEL)
 // --------------------
 function initLand() {
     land = [];
@@ -126,7 +126,7 @@ function initLand() {
     let base = 180;
 
     for (let i = 0; i < W; i++) {
-        land.push(base - i * slope * 60);
+        land.push(base - i * slope * 80);
     }
 }
 initLand();
@@ -146,7 +146,7 @@ function updateLabels() {
 }
 
 // --------------------
-// DRAW LAND (STATIC VEGETATION)
+// DRAW LAND (STATIC VEG)
 // --------------------
 function drawLand(waterParticles = []) {
 
@@ -173,7 +173,7 @@ function drawLand(waterParticles = []) {
     ctx.fillStyle = groundColor;
     ctx.fill();
 
-    // water river
+    // water
     ctx.fillStyle = "rgba(0,120,255,0.6)";
     waterParticles.forEach(p => {
         ctx.beginPath();
@@ -181,19 +181,16 @@ function drawLand(waterParticles = []) {
         ctx.fill();
     });
 
-    // --------------------
-    // STATIC VEGETATION (FIXED)
-    // --------------------
+    // vegetation (STATIC)
     const veg = document.getElementById("veg").value / 100;
 
     if (!window.vegMap) {
         window.vegMap = [];
 
         for (let i = 0; i < W; i++) {
-            let count = Math.floor(veg * 6);
             window.vegMap[i] = [];
 
-            for (let j = 0; j < count; j++) {
+            for (let j = 0; j < veg * 6; j++) {
                 window.vegMap[i].push({
                     offset: Math.random()
                 });
@@ -206,7 +203,7 @@ function drawLand(waterParticles = []) {
             ctx.fillStyle = "green";
             ctx.fillRect(
                 i * (c.width / W),
-                c.height - land[i] - (p.offset * 10),
+                c.height - land[i] - p.offset * 10,
                 2, 2
             );
         });
@@ -214,16 +211,16 @@ function drawLand(waterParticles = []) {
 }
 
 // --------------------
-// RESET TERRAIN
+// RESET TERRAIN ON CHANGE
 // --------------------
 function updateTerrain() {
-    initLand();
     window.vegMap = null;
+    initLand();
     drawLand();
 }
 
 // --------------------
-// RIVER FLOW (FIXED ON LAND)
+// RIVER FLOW (FIXED)
 // --------------------
 function animateWater(callback) {
 
@@ -254,7 +251,6 @@ function animateWater(callback) {
 
             let targetY = 250 - land[index];
 
-            // stick to terrain
             p.y += (targetY - p.y) * 0.25;
         });
 
@@ -327,9 +323,9 @@ function runStorm() {
         let avg = land.reduce((a,b)=>a+b,0)/land.length;
 
         labels.push("Year " + year);
-        erosionData.push(result.erosion.toFixed(2));
-        depositionData.push(result.deposition.toFixed(2));
-        heightData.push(avg.toFixed(2));
+        erosionData.push(result.erosion);
+        depositionData.push(result.deposition);
+        heightData.push(avg);
 
         updateChart();
         drawLand();
