@@ -129,9 +129,9 @@ function updateLabels() {
 }
 
 // --------------------
-// DRAW LAND
+// DRAW
 // --------------------
-function drawLand(waterParticles = []) {
+function drawLand(particles = []) {
 
     const c = document.getElementById("land");
     const ctx = c.getContext("2d");
@@ -152,7 +152,7 @@ function drawLand(waterParticles = []) {
     ctx.fillStyle=color;
     ctx.fill();
 
-    // river channel memory
+    // river memory visualization
     for(let i=0;i<W;i++){
         if(flowMap[i] > 1){
             ctx.fillStyle="rgba(0,100,255,0.3)";
@@ -162,7 +162,7 @@ function drawLand(waterParticles = []) {
 
     // water particles
     ctx.fillStyle="rgba(0,120,255,0.6)";
-    waterParticles.forEach(p=>{
+    particles.forEach(p=>{
         ctx.beginPath();
         ctx.arc(p.x,p.y,3,0,Math.PI*2);
         ctx.fill();
@@ -204,7 +204,6 @@ function updateTerrain(){
 function animateWater(callback){
 
     let particles=[];
-
     for(let i=0;i<40;i++){
         particles.push({x:Math.random()*500,y:30});
     }
@@ -250,7 +249,7 @@ function animateWater(callback){
 }
 
 // --------------------
-// EROSION
+// EROSION + CHANNEL MEMORY + REALISM FIX
 // --------------------
 function simulateErosion(){
 
@@ -261,9 +260,9 @@ function simulateErosion(){
     const veg = document.getElementById("veg").value/100;
     const ground = document.getElementById("ground").value;
 
-    let groundFactor = ground==="sand"?1.8:ground==="rock"?0.4:1;
+    let groundFactor = ground==="sand"?1.8:ground==="rock"?0.35:1;
 
-    let factor = water * (1-veg) * groundFactor * 0.15;
+    let factor = water * (1-veg) * groundFactor * 0.12;
 
     let newLand=[...land];
 
@@ -271,40 +270,45 @@ function simulateErosion(){
 
         let diff = land[i-1] - land[i];
 
-        if(diff > 0){
+        // base sheet erosion (fixes slope=0 issue)
+        let baseErosion = 0.02 * water * (1-veg);
 
-            let flowBoost = 1 + flowMap[i]*0.05;
+        let slopeErosion = diff * factor;
 
-            let move = diff * factor * flowBoost;
+        let flowBoost = 1 + flowMap[i]*0.06;
 
-            newLand[i-1] -= move;
-            newLand[i] += move * 0.7;
+        let move = (slopeErosion * flowBoost) + baseErosion;
 
-            erosion += move;
-            deposition += move * 0.7;
-        }
+        newLand[i-1] -= move;
+        newLand[i] += move * 0.7;
+
+        erosion += move;
+        deposition += move * 0.7;
     }
 
     land = newLand;
 
-    smoothTerrain();
+    // slope collapse (prevents spikes)
+    relaxSlopes();
 
     return {erosion,deposition};
 }
 
 // --------------------
-// SMOOTHING (fix spikes)
+// SLOPE RELAXATION (FIXES POINTY TERRAIN)
 // --------------------
-function smoothTerrain(){
+function relaxSlopes(){
 
     let smoothed=[...land];
 
     for(let i=1;i<W-1;i++){
-        let avg = (land[i-1]+land[i]+land[i+1])/3;
-        smoothed[i] = land[i]*0.85 + avg*0.15;
+
+        let avg=(land[i-1]+land[i]+land[i+1])/3;
+
+        smoothed[i]=land[i]*0.82 + avg*0.18;
     }
 
-    land = smoothed;
+    land=smoothed;
 }
 
 // --------------------
@@ -314,7 +318,7 @@ function runStorm(){
 
     if(animationRunning) return;
 
-    animationRunning = true;
+    animationRunning=true;
 
     animateWater(()=>{
 
@@ -322,7 +326,7 @@ function runStorm(){
 
         year++;
 
-        let avg = land.reduce((a,b)=>a+b,0)/W;
+        let avg=land.reduce((a,b)=>a+b,0)/W;
 
         labels.push("Y"+year);
         erosionData.push(result.erosion);
@@ -333,7 +337,7 @@ function runStorm(){
         updateTable();
         drawLand();
 
-        animationRunning = false;
+        animationRunning=false;
     });
 }
 
@@ -354,9 +358,7 @@ function updateChart(){
                 ]
             }
         });
-    } else {
-        chart.update();
-    }
+    } else chart.update();
 }
 
 // --------------------
@@ -383,7 +385,7 @@ function updateTable(){
 // --------------------
 function resetSim(){
 
-    animationRunning = false;
+    animationRunning=false;
 
     year=0;
     labels=[];
