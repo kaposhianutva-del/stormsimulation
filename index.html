@@ -289,8 +289,21 @@ function simulateErosion(){
     }
 
     land=newLand;
-
+    
+    smoothTerrain();
+    
     return {erosion,deposition};
+    function smoothTerrain() {
+    let smoothed = [...land];
+
+    for (let i = 1; i < W - 1; i++) {
+
+        let avg = (land[i - 1] + land[i] + land[i + 1]) / 3;
+
+        smoothed[i] = land[i] * 0.85 + avg * 0.15;
+    }
+
+    land = smoothed;
 }
 
 // --------------------
