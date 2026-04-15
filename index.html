@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Erosion & Sediment Simulator</title>
+<title>Erosion Simulator (Stable)</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
 <style>
@@ -26,35 +26,25 @@ td, th { border:1px solid #ccc; padding:5px; text-align:center; }
 <body>
 
 <header>
-<h2>🌊 Erosion & Sediment Transport Simulator</h2>
+<h2>🌊 Erosion & Deposition Simulator</h2>
 </header>
 
 <div class="container">
 
-<!-- CONTROLS -->
 <div class="panel">
 <h3>Controls</h3>
 
-<div class="control-group">
 <label>Slope: <span id="slopeVal">2.5%</span></label>
-<input type="range" id="slope" min="0" max="5" step="0.1" value="2.5"
-oninput="updateTerrain(); updateLabels();">
-</div>
+<input type="range" id="slope" min="0" max="5" step="0.1" value="2.5">
 
-<div class="control-group">
 <label>Water Flow: <span id="waterVal">50%</span></label>
-<input type="range" id="water" min="0" max="100" value="50"
-oninput="updateLabels()">
-</div>
+<input type="range" id="water" min="0" max="100" value="50">
 
-<div class="control-group">
 <label>Vegetation: <span id="vegVal">40%</span></label>
-<input type="range" id="veg" min="0" max="100" value="40"
-oninput="updateTerrain(); updateLabels();">
-</div>
+<input type="range" id="veg" min="0" max="100" value="40">
 
 <label>Ground Type</label>
-<select id="ground" onchange="updateTerrain()">
+<select id="ground">
 <option value="sand">Sand</option>
 <option value="soil" selected>Soil</option>
 <option value="rock">Rock</option>
@@ -64,19 +54,16 @@ oninput="updateTerrain(); updateLabels();">
 <button onclick="resetSim()">🔄 Reset</button>
 </div>
 
-<!-- LANDSCAPE -->
 <div class="panel">
 <h3>Landscape</h3>
 <canvas id="land" width="500" height="250"></canvas>
 </div>
 
-<!-- GRAPH -->
 <div class="panel">
 <h3>Graph</h3>
 <canvas id="chart"></canvas>
 </div>
 
-<!-- TABLE -->
 <div class="panel">
 <h3>Data Table</h3>
 <table>
@@ -97,10 +84,12 @@ oninput="updateTerrain(); updateLabels();">
 <script>
 
 // -------------------- STATE --------------------
+const W = 60;
+
 let land = [];
 let sediment = [];
 let flowMap = [];
-const W = 60;
+
 let year = 0;
 
 let labels = [];
@@ -108,241 +97,179 @@ let erosionData = [];
 let depositionData = [];
 let heightData = [];
 
-let chart;
-let animationRunning = false;
+let chart = null;
+let running = false;
+
+// -------------------- SAFE INPUTS --------------------
+function getInputs() {
+    return {
+        slope: Number(document.getElementById("slope").value) / 100,
+        water: Number(document.getElementById("water").value) / 100,
+        veg: Number(document.getElementById("veg").value) / 100,
+        ground: document.getElementById("ground").value
+    };
+}
 
 // -------------------- INIT --------------------
-function initLand() {
+function init() {
 
     land = [];
     sediment = [];
     flowMap = new Array(W).fill(0);
 
-    const slope = document.getElementById("slope").value / 100;
+    const { slope } = getInputs();
     let base = 180;
 
     for (let i = 0; i < W; i++) {
-        land.push(base - i * slope * 80);
-        sediment.push(0);
+        land[i] = base - i * slope * 80;
+        sediment[i] = 0;
     }
 }
 
-// -------------------- UI --------------------
-function updateLabels() {
-    slopeVal.innerText = slope.value + "%";
-    waterVal.innerText = water.value + "%";
-    vegVal.innerText = veg.value + "%";
+// -------------------- SAFE SLOPE --------------------
+function slopeAt(i) {
+
+    if (i <= 0 || i >= W - 1) return 0;
+
+    let left = land[i - 1];
+    let right = land[i + 1];
+
+    if (!isFinite(left) || !isFinite(right)) return 0;
+
+    return (left - right) / 2;
 }
 
 // -------------------- DRAW --------------------
-function drawLand(particles = []) {
+function draw() {
 
     const c = document.getElementById("land");
     const ctx = c.getContext("2d");
 
     ctx.clearRect(0,0,c.width,c.height);
 
-    const ground = document.getElementById("ground").value;
-    let color = ground==="sand"?"#d8c27a":ground==="rock"?"#666":"#8B5A2B";
+    const colors = {
+        sand:"#d8c27a",
+        soil:"#8B5A2B",
+        rock:"#666"
+    };
+
+    const { ground } = getInputs();
 
     ctx.beginPath();
     ctx.moveTo(0,c.height);
 
-    for(let i=0;i<W;i++){
-        ctx.lineTo(i*(c.width/W), c.height-land[i]);
+    for (let i = 0; i < W; i++) {
+        ctx.lineTo(i*(c.width/W), c.height - land[i]);
     }
 
     ctx.lineTo(c.width,c.height);
-    ctx.fillStyle=color;
+    ctx.fillStyle = colors[ground];
     ctx.fill();
 
-    // sediment visualization (blue = deposition)
-    for(let i=0;i<W;i++){
-        if(sediment[i] > 1){
-            ctx.fillStyle="rgba(0,80,200,0.4)";
-            ctx.fillRect(i*(c.width/W), c.height-land[i]-2, 6, 4);
+    ctx.fillStyle = "rgba(0,80,200,0.4)";
+    for (let i = 0; i < W; i++) {
+        if (sediment[i] > 1) {
+            ctx.fillRect(i*(c.width/W), c.height - land[i], 4, 4);
         }
     }
-
-    // river memory
-    for(let i=0;i<W;i++){
-        if(flowMap[i] > 1){
-            ctx.fillStyle="rgba(0,120,255,0.3)";
-            ctx.fillRect(i*(c.width/W), c.height-land[i]-2, 6, 4);
-        }
-    }
-
-    // water particles
-    ctx.fillStyle="rgba(0,120,255,0.6)";
-    particles.forEach(p=>{
-        ctx.beginPath();
-        ctx.arc(p.x,p.y,3,0,Math.PI*2);
-        ctx.fill();
-    });
 }
 
-// -------------------- TERRAIN SLOPE --------------------
-function computeSlopeAt(i){
-    if(i<=0 || i>=W-1) return 0;
+// -------------------- EROSION --------------------
+function stepErosion() {
 
-    let left = land[i-1];
-    let right = land[i+1];
+    let { water, veg, ground } = getInputs();
 
-    if(isNaN(left) || isNaN(right)) return 0;
+    let factor =
+        ground === "sand" ? 1.7 :
+        ground === "rock" ? 0.25 : 1;
 
-    return (left - right) / 2;
-}
+    let newLand = [...land];
+    let newSed = [...sediment];
 
-// -------------------- WATER FLOW --------------------
-function animateWater(callback){
+    let erosion = 0;
+    let deposition = 0;
 
-    let particles=[];
-    for(let i=0;i<40;i++){
-        particles.push({x:Math.random()*500,y:30});
-    }
+    for (let i = 1; i < W; i++) {
 
-    let frames=0;
+        let s = slopeAt(i);
 
-    function step(){
+        let move =
+            (Math.abs(s) * water * factor * 0.08) +
+            (0.015 * water * (1 - veg));
 
-        if(!animationRunning) return;
+        move = Math.min(move, 0.6);
 
-        frames++;
+        if (!isFinite(move)) move = 0;
 
-        particles.forEach(p=>{
-
-            let idx=Math.floor((p.x/500)*W);
-            if(idx>=W) idx=W-1;
-
-            let slopeForce = computeSlopeAt(idx) * 0.05;
-
-            p.x += 2 + Math.max(0, slopeForce);
-
-            let target=250-land[idx];
-            p.y += (target-p.y)*0.3;
-
-            flowMap[idx] += 0.5;
-        });
-
-        drawLand(particles);
-
-        if(frames<60){
-            requestAnimationFrame(step);
-        } else {
-            for(let i=0;i<W;i++){
-                flowMap[i] *= 0.9;
-            }
-            callback();
-        }
-    }
-
-    step();
-}
-
-// -------------------- EROSION + SEDIMENT TRACKING --------------------
-function simulateErosion(){
-
-    let erosion=0;
-    let deposition=0;
-
-    const water = document.getElementById("water").value/100;
-    const veg = document.getElementById("veg").value/100;
-    const ground = document.getElementById("ground").value;
-
-    let groundFactor =
-        ground==="sand"?1.7:
-        ground==="rock"?0.25:1;
-
-    let newLand=[...land];
-    let newSediment=[...sediment];
-
-    for(let i=1;i<W;i++){
-
-        let slope = computeSlopeAt(i);
-
-        let baseErosion = 0.015 * water * (1-veg);
-
-        let slopeErosion = slope * water * groundFactor * 0.08;
-
-        let flowBoost = 1 + flowMap[i]*0.05;
-
-        let move = (Math.abs(slopeErosion) * flowBoost) + baseErosion;
-
-        move = Math.min(move, 0.8);
-
-        // erosion removes land + adds sediment to system
-        newLand[i-1] -= move;
-        newSediment[i-1] -= move;
-
-        // deposition moves sediment locally
+        newLand[i - 1] -= move;
         newLand[i] += move * 0.7;
-        newSediment[i] += move * 0.7;
+
+        newSed[i - 1] -= move;
+        newSed[i] += move * 0.7;
 
         erosion += move;
         deposition += move * 0.5;
     }
 
     land = newLand;
-    sediment = newSediment;
+    sediment = newSed;
 
-    relaxSlopes();
+    // smoothing
+    smooth();
 
-    return {erosion,deposition};
+    return { erosion, deposition };
 }
 
-// -------------------- SLOPE RELAXATION --------------------
-function relaxSlopes(){
+// -------------------- SMOOTH --------------------
+function smooth() {
 
-    let smoothed=[...land];
+    let out = [...land];
 
-    for(let i=1;i<W-1;i++){
-        let avg=(land[i-1]+land[i]+land[i+1])/3;
-        smoothed[i]=land[i]*0.8 + avg*0.2;
+    for (let i = 1; i < W - 1; i++) {
+        let avg = (land[i - 1] + land[i] + land[i + 1]) / 3;
+        out[i] = land[i] * 0.8 + avg * 0.2;
     }
 
-    land=smoothed;
+    land = out.map(v => isFinite(v) ? v : 180);
 }
 
 // -------------------- RUN --------------------
-function runStorm(){
+function runStorm() {
 
-    if(animationRunning) return;
+    if (running) return;
+    running = true;
 
-    animationRunning=true;
+    let result = stepErosion();
 
-    animateWater(()=>{
+    year++;
 
-        const result=simulateErosion();
+    let safe = land.filter(v => isFinite(v));
+    let avg = safe.length ? safe.reduce((a,b)=>a+b,0)/safe.length : 180;
 
-        year++;
+    labels.push("Y"+year);
+    erosionData.push(result.erosion);
+    depositionData.push(result.deposition);
+    heightData.push(avg);
 
-        let avg=land.reduce((a,b)=>a+b,0)/W;
+    updateChart();
+    updateTable();
+    draw();
 
-        labels.push("Y"+year);
-        erosionData.push(result.erosion);
-        depositionData.push(result.deposition);
-        heightData.push(avg);
-
-        updateChart();
-        updateTable();
-        drawLand();
-
-        animationRunning=false;
-    });
+    running = false;
 }
 
-// -------------------- GRAPH --------------------
-function updateChart(){
+// -------------------- CHART --------------------
+function updateChart() {
 
-    if(!chart){
-        chart=new Chart(document.getElementById("chart"),{
+    if (!chart) {
+        chart = new Chart(document.getElementById("chart"), {
             type:"line",
             data:{
                 labels,
                 datasets:[
-                    {label:"Erosion",data:erosionData},
-                    {label:"Deposition",data:depositionData},
-                    {label:"Avg Height",data:heightData}
+                    {label:"Erosion", data: erosionData},
+                    {label:"Deposition", data: depositionData},
+                    {label:"Avg Height", data: heightData}
                 ]
             }
         });
@@ -350,13 +277,13 @@ function updateChart(){
 }
 
 // -------------------- TABLE --------------------
-function updateTable(){
+function updateTable() {
 
-    const tbody=document.getElementById("tableBody");
-    tbody.innerHTML="";
+    let t = document.getElementById("tableBody");
+    t.innerHTML = "";
 
-    for(let i=0;i<labels.length;i++){
-        tbody.innerHTML+=`
+    for (let i = 0; i < labels.length; i++) {
+        t.innerHTML += `
         <tr>
         <td>${labels[i]}</td>
         <td>${erosionData[i].toFixed(2)}</td>
@@ -367,29 +294,27 @@ function updateTable(){
 }
 
 // -------------------- RESET --------------------
-function resetSim(){
+function resetSim() {
 
-    animationRunning=false;
+    year = 0;
+    labels = [];
+    erosionData = [];
+    depositionData = [];
+    heightData = [];
 
-    year=0;
-    labels=[];
-    erosionData=[];
-    depositionData=[];
-    heightData=[];
-
-    if(chart){
+    if (chart) {
         chart.destroy();
-        chart=null;
+        chart = null;
     }
 
-    document.getElementById("tableBody").innerHTML="";
-
-    updateTerrain();
+    init();
+    draw();
+    updateTable();
 }
 
-// -------------------- START --------------------
-updateLabels();
-updateTerrain();
+// -------------------- INIT START --------------------
+init();
+draw();
 
 </script>
 
