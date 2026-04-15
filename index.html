@@ -14,6 +14,7 @@ canvas { border:1px solid #ccc; background:#cfefff; }
 button { width:100%; padding:10px; margin-top:10px; }
 table { width:100%; border-collapse:collapse; margin-top:10px; }
 td, th { border:1px solid #ccc; padding:5px; text-align:center; }
+.control-group { margin-bottom:12px; }
 </style>
 </head>
 
@@ -28,14 +29,23 @@ td, th { border:1px solid #ccc; padding:5px; text-align:center; }
 <div class="panel">
 <h3>Controls</h3>
 
+<div class="control-group">
 <label>Slope: <span id="slopeVal">2.5%</span></label>
-<input type="range" id="slope" min="0" max="5" step="0.1" value="2.5" oninput="updateTerrain(); updateLabels();">
+<input type="range" id="slope" min="0" max="5" step="0.1" value="2.5"
+oninput="updateTerrain(); updateLabels();">
+</div>
 
+<div class="control-group">
 <label>Water Flow: <span id="waterVal">50%</span></label>
-<input type="range" id="water" min="0" max="100" value="50" oninput="updateLabels()">
+<input type="range" id="water" min="0" max="100" value="50"
+oninput="updateLabels()">
+</div>
 
+<div class="control-group">
 <label>Vegetation: <span id="vegVal">40%</span></label>
-<input type="range" id="veg" min="0" max="100" value="40" oninput="updateTerrain(); updateLabels()">
+<input type="range" id="veg" min="0" max="100" value="40"
+oninput="updateTerrain(); updateLabels()">
+</div>
 
 <label>Ground Type</label>
 <select id="ground" onchange="updateTerrain()">
@@ -92,6 +102,7 @@ let depositionData = [];
 let heightData = [];
 
 let chart;
+let animationRunning = false;
 
 // --------------------
 // INIT LAND
@@ -141,7 +152,7 @@ function drawLand(waterParticles = []) {
     ctx.fillStyle=color;
     ctx.fill();
 
-    // river (slightly darker where flow is stronger)
+    // river channel (memory)
     for(let i=0;i<W;i++){
         if(flowMap[i] > 1){
             ctx.fillStyle = "rgba(0,100,255,0.3)";
@@ -188,7 +199,7 @@ function updateTerrain(){
 }
 
 // --------------------
-// WATER FLOW (records memory)
+// WATER FLOW
 // --------------------
 function animateWater(callback){
 
@@ -201,6 +212,9 @@ function animateWater(callback){
     let frames=0;
 
     function step(){
+
+        if(!animationRunning) return;
+
         frames++;
 
         const slope = document.getElementById("slope").value/100;
@@ -215,7 +229,6 @@ function animateWater(callback){
             let target=250-land[idx];
             p.y += (target-p.y)*0.3;
 
-            // record flow
             flowMap[idx] += 0.5;
         });
 
@@ -225,7 +238,6 @@ function animateWater(callback){
             requestAnimationFrame(step);
         } else {
 
-            // decay flow memory
             for(let i=0;i<W;i++){
                 flowMap[i] *= 0.9;
             }
@@ -238,7 +250,7 @@ function animateWater(callback){
 }
 
 // --------------------
-// EROSION (with channel memory)
+// EROSION
 // --------------------
 function simulateErosion(){
 
@@ -283,6 +295,10 @@ function simulateErosion(){
 // --------------------
 function runStorm(){
 
+    if(animationRunning) return;
+
+    animationRunning = true;
+
     animateWater(()=>{
 
         const result=simulateErosion();
@@ -299,6 +315,8 @@ function runStorm(){
         updateChart();
         updateTable();
         drawLand();
+
+        animationRunning = false;
     });
 }
 
@@ -347,17 +365,23 @@ function updateTable(){
 // RESET
 // --------------------
 function resetSim(){
+
+    animationRunning = false;
+
     year=0;
     labels=[];
     erosionData=[];
     depositionData=[];
     heightData=[];
-    chart=null;
 
-    document.getElementById("chart").getContext("2d").clearRect(0,0,500,300);
+    if(chart){
+        chart.destroy();
+        chart = null;
+    }
+
+    document.getElementById("tableBody").innerHTML="";
 
     updateTerrain();
-    updateTable();
 }
 
 // INIT
