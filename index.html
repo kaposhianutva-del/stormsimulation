@@ -8,12 +8,17 @@
 <style>
 body { font-family: Arial; margin:0; background:#f4f4f4; }
 header { background:#2c3e50; color:white; padding:1rem; text-align:center; }
+
 .container { display:flex; flex-wrap:wrap; padding:10px; }
 .panel { flex:1; min-width:300px; background:white; margin:10px; padding:12px; border-radius:8px; }
+
 canvas { border:1px solid #ccc; background:#cfefff; }
+
 button { width:100%; padding:10px; margin-top:10px; }
+
 table { width:100%; border-collapse:collapse; margin-top:10px; }
 td, th { border:1px solid #ccc; padding:5px; text-align:center; }
+
 .control-group { margin-bottom:10px; }
 </style>
 </head>
@@ -26,6 +31,7 @@ td, th { border:1px solid #ccc; padding:5px; text-align:center; }
 
 <div class="container">
 
+<!-- CONTROLS -->
 <div class="panel">
 <h3>Controls</h3>
 
@@ -56,19 +62,21 @@ oninput="updateTerrain(); updateLabels();">
 
 <button onclick="runStorm()">🌧 Run Storm</button>
 <button onclick="resetSim()">🔄 Reset</button>
-
 </div>
 
+<!-- LANDSCAPE -->
 <div class="panel">
 <h3>Landscape</h3>
 <canvas id="land" width="500" height="250"></canvas>
 </div>
 
+<!-- GRAPH -->
 <div class="panel">
 <h3>Graph</h3>
 <canvas id="chart"></canvas>
 </div>
 
+<!-- TABLE -->
 <div class="panel">
 <h3>Data Table</h3>
 <table>
@@ -88,9 +96,7 @@ oninput="updateTerrain(); updateLabels();">
 
 <script>
 
-// --------------------
-// STATE
-// --------------------
+// -------------------- STATE --------------------
 let land = [];
 let flowMap = [];
 const W = 60;
@@ -104,10 +110,9 @@ let heightData = [];
 let chart;
 let animationRunning = false;
 
-// --------------------
-// INIT LAND
-// --------------------
+// -------------------- INIT --------------------
 function initLand() {
+
     land = [];
     flowMap = new Array(W).fill(0);
 
@@ -119,18 +124,14 @@ function initLand() {
     }
 }
 
-// --------------------
-// LABELS
-// --------------------
+// -------------------- LABELS --------------------
 function updateLabels() {
     slopeVal.innerText = slope.value + "%";
     waterVal.innerText = water.value + "%";
     vegVal.innerText = veg.value + "%";
 }
 
-// --------------------
-// DRAW
-// --------------------
+// -------------------- DRAW --------------------
 function drawLand(particles = []) {
 
     const c = document.getElementById("land");
@@ -152,7 +153,7 @@ function drawLand(particles = []) {
     ctx.fillStyle=color;
     ctx.fill();
 
-    // river memory visualization
+    // river memory
     for(let i=0;i<W;i++){
         if(flowMap[i] > 1){
             ctx.fillStyle="rgba(0,100,255,0.3)";
@@ -168,7 +169,7 @@ function drawLand(particles = []) {
         ctx.fill();
     });
 
-    // vegetation (static)
+    // vegetation
     const veg = document.getElementById("veg").value/100;
 
     if(!window.vegMap){
@@ -189,18 +190,14 @@ function drawLand(particles = []) {
     }
 }
 
-// --------------------
-// UPDATE TERRAIN
-// --------------------
+// -------------------- UPDATE TERRAIN --------------------
 function updateTerrain(){
     window.vegMap=null;
     initLand();
     drawLand();
 }
 
-// --------------------
-// WATER FLOW
-// --------------------
+// -------------------- WATER FLOW --------------------
 function animateWater(callback){
 
     let particles=[];
@@ -248,9 +245,7 @@ function animateWater(callback){
     step();
 }
 
-// --------------------
-// EROSION + CHANNEL MEMORY + REALISM FIX
-// --------------------
+// -------------------- EROSION (STABLE MODEL) --------------------
 function simulateErosion(){
 
     let erosion=0;
@@ -260,9 +255,9 @@ function simulateErosion(){
     const veg = document.getElementById("veg").value/100;
     const ground = document.getElementById("ground").value;
 
-    let groundFactor = ground==="sand"?1.8:ground==="rock"?0.35:1;
+    let groundFactor = ground==="sand"?1.6:ground==="rock"?0.3:1;
 
-    let factor = water * (1-veg) * groundFactor * 0.12;
+    let factor = water * (1-veg) * groundFactor * 0.1;
 
     let newLand=[...land];
 
@@ -271,35 +266,32 @@ function simulateErosion(){
         let diff = land[i-1] - land[i];
 
         // base sheet erosion (fixes slope=0 issue)
-        let baseErosion = 0.02 * water * (1-veg);
+        let baseErosion = 0.015 * water * (1-veg);
 
         let slopeErosion = diff * factor;
 
-        let flowBoost = 1 + flowMap[i]*0.06;
+        let flowBoost = 1 + flowMap[i]*0.05;
 
-        let move = Math.max(
-    0,
-    (Math.abs(slopeErosion) * flowBoost) + baseErosion
-);
+        let move = (slopeErosion * flowBoost) + baseErosion;
+
+        // CAP (prevents runaway erosion)
+        move = Math.min(Math.max(move, 0), 0.8);
 
         newLand[i-1] -= move;
         newLand[i] += move * 0.7;
 
-    erosion += move;
-deposition += move * 0.5;
+        erosion += move;
+        deposition += move * 0.5;
     }
 
     land = newLand;
 
-    // slope collapse (prevents spikes)
     relaxSlopes();
 
     return {erosion,deposition};
 }
 
-// --------------------
-// SLOPE RELAXATION (FIXES POINTY TERRAIN)
-// --------------------
+// -------------------- SLOPE RELAXATION (FIXS SPIKES) --------------------
 function relaxSlopes(){
 
     let smoothed=[...land];
@@ -308,15 +300,13 @@ function relaxSlopes(){
 
         let avg=(land[i-1]+land[i]+land[i+1])/3;
 
-        smoothed[i]=land[i]*0.82 + avg*0.18;
+        smoothed[i]=land[i]*0.8 + avg*0.2;
     }
 
     land=smoothed;
 }
 
-// --------------------
-// RUN STORM
-// --------------------
+// -------------------- RUN STORM --------------------
 function runStorm(){
 
     if(animationRunning) return;
@@ -344,9 +334,7 @@ function runStorm(){
     });
 }
 
-// --------------------
-// GRAPH
-// --------------------
+// -------------------- GRAPH --------------------
 function updateChart(){
 
     if(!chart){
@@ -364,9 +352,7 @@ function updateChart(){
     } else chart.update();
 }
 
-// --------------------
-// TABLE
-// --------------------
+// -------------------- TABLE --------------------
 function updateTable(){
 
     const tbody=document.getElementById("tableBody");
@@ -383,9 +369,7 @@ function updateTable(){
     }
 }
 
-// --------------------
-// RESET
-// --------------------
+// -------------------- RESET --------------------
 function resetSim(){
 
     animationRunning=false;
