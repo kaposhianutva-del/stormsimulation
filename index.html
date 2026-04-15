@@ -275,7 +275,10 @@ function simulateErosion(){
 
             let flowBoost = 1 + flowMap[i]*0.05;
 
-            let move = diff * factor * flowBoost;
+            let slopeErosion = diff * factor * flowBoost;
+            let sheetErosion = 0.01 * water * (1 - veg);
+
+            let move = slopeErosion + sheetErosion;
 
             newLand[i-1] -= move;
             newLand[i] += move * 0.7;
